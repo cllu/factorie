@@ -36,8 +36,10 @@ class ForwardPOSTagger extends DocumentAnnotator {
       The key into the ambiguityClasses is app.strings.replaceDigits().toLowerCase */
   object WordData {
     val ambiguityClasses = collection.mutable.HashMap[String,String]()
+    val sureTokens = collection.mutable.HashMap[String,Int]()
     val ambiguityClassThreshold = 0.7
     val wordInclusionThreshold = 1
+    val sureTokenThreshold = 1000
 
     def preProcess(tokens: Iterable[Token]) {
       val wordCounts = collection.mutable.HashMap[String,Int]()
@@ -66,6 +68,12 @@ class ForwardPOSTagger extends DocumentAnnotator {
           val bestPos = (0 until 45).maxBy(i => pos(i))
           if (pos(bestPos) > ambiguityClassThreshold*counts)
             ambiguityClasses(w) = PennPosDomain.category(bestPos)
+        }
+        if (wordCounts(w) > sureTokenThreshold) {
+          val pos = posCounts(w)
+          if (pos.max == wordCounts(w)) {
+            sureTokens(w) = pos.zipWithIndex.maxBy(_._1)._2
+          }
         }
       })
     }
@@ -209,7 +217,12 @@ class ForwardPOSTagger extends DocumentAnnotator {
       val posLabel = token.attr[PennPosLabel]
       val featureVector = features(token, index, lemmaStrings)
       if (token.attr[PennPosLabel] eq null) token.attr += new PennPosLabel(token, "NNP")
-      token.attr[PennPosLabel].set(model.classification(featureVector).bestLabelIndex)(null)
+      if (WordData.sureTokens.contains(token.string)) {
+        token.attr[PennPosLabel].set(WordData.sureTokens(token.string))(null)
+      } else {
+        val featureVector = features(token, index, lemmaStrings)
+        token.attr[PennPosLabel].set(model.classification(featureVector).bestLabelIndex)(null)
+      }
     }
   }
   def predict(span: TokenSpan): Unit = predict(span.tokens)
@@ -237,6 +250,7 @@ class ForwardPOSTagger extends DocumentAnnotator {
     BinarySerializer.serialize(FeatureDomain.dimensionDomain, dstream)
     BinarySerializer.serialize(model, dstream)
     BinarySerializer.serialize(WordData.ambiguityClasses, dstream)
+    BinarySerializer.serialize(WordData.sureTokens, dstream)
     dstream.close()  // TODO Are we really supposed to close here, or is that the responsibility of the caller
   }
   def deserialize(stream: java.io.InputStream): Unit = {
@@ -246,9 +260,11 @@ class ForwardPOSTagger extends DocumentAnnotator {
     model.weights.set(new la.DenseLayeredTensor2(FeatureDomain.dimensionDomain.size, PennPosDomain.size, new la.SparseIndexedTensor1(_)))
     BinarySerializer.deserialize(model, dstream)
     BinarySerializer.deserialize(WordData.ambiguityClasses, dstream)
+    BinarySerializer.deserialize(WordData.sureTokens, dstream)
     dstream.close()  // TODO Are we really supposed to close here, or is that the responsibility of the caller
   }
   
+  // TODO re-use code
   def accuracy(sentences:Iterable[Sentence]): Double = {
     var total = 0.0
     var correct = 0.0
@@ -264,6 +280,38 @@ class ForwardPOSTagger extends DocumentAnnotator {
     })
     println(s"${total*1000/totalTime} tokens/sec")
     correct/total
+  }
+  
+  // TODO re-use code
+  def detailedAccuracy(sentences:Iterable[Sentence]): (Double, Double, Double, Double) = {
+    var tokenTotal = 0.0
+    var tokenCorrect = 0.0
+    var totalTime = 0.0
+    var sentenceCorrect = 0.0
+    var sentenceTotal = 0.0
+    sentences.foreach(s => {
+      var thisSentenceCorrect = 1.0
+      val t0 = System.currentTimeMillis()
+      predict(s)
+      totalTime += (System.currentTimeMillis()-t0)
+      for (token <- s.tokens) {      
+        tokenTotal += 1
+        if (token.attr[PennPosLabel].valueIsTarget) tokenCorrect += 1.0
+        else thisSentenceCorrect = 0.0
+      }
+      sentenceCorrect += thisSentenceCorrect
+      sentenceTotal += 1.0
+    })
+    var tokensPerSecond = (tokenTotal/totalTime)*1000.0
+    (tokenCorrect/tokenTotal, sentenceCorrect/sentenceTotal, tokensPerSecond, tokenTotal)
+  }
+  
+  def test(sentences:Iterable[Sentence]) = {
+    println("Testing on " + sentences.size + " sentences...")
+    var(tokAccuracy, sentAccuracy, speed, tokens) = detailedAccuracy(sentences)
+    println("Tested on " + tokens + " tokens at " + speed + " tokens/sec")
+    println("Token accuracy: " + tokAccuracy)
+    println("Sentence accuracy: " + sentAccuracy)
   }
   
   def train(trainSentences:Seq[Sentence], testSentences:Seq[Sentence], lrate:Double = 0.1, decay:Double = 0.01, cutoff:Int = 2, doBootstrap:Boolean = true, useHingeLoss:Boolean = false, numIterations: Int = 5, l1Factor:Double = 0.000001, l2Factor:Double = 0.000001)(implicit random: scala.util.Random) {
@@ -318,8 +366,10 @@ object ForwardPOSTaggerOntonotes extends ForwardPOSTagger(cc.factorie.util.Class
 
 class ForwardPOSOptions extends cc.factorie.util.DefaultCmdOptions with SharedNLPCmdOptions{
   val modelFile = new CmdOption("model", "", "FILENAME", "Filename for the model (saving a trained model or reading a running model.")
-  val testFile = new CmdOption("test", "", "FILENAME", "OWPL test file.")
-  val trainFile = new CmdOption("train", "", "FILENAME", "OWPL training file.")
+  val testFile = new CmdOption("testFile", "", "FILENAME", "OWPL test file.")
+  val trainFile = new CmdOption("trainFile", "", "FILENAME", "OWPL training file.")
+  val testDir = new CmdOption("testDir", "", "FILENAME", "Directory containing OWPL test files (.dep.pmd).")
+  val trainDir = new CmdOption("trainDir", "", "FILENAME", "Directory containing OWPL training files (.dep.pmd).")
   val l1 = new CmdOption("l1", 0.000001,"FLOAT","l1 regularization weight")
   val l2 = new CmdOption("l2", 0.00001,"FLOAT","l2 regularization weight")
   val rate = new CmdOption("rate", 10.0,"FLOAT","base learning rate")
@@ -338,17 +388,27 @@ object ForwardPOSTrainer extends HyperparameterMain {
     implicit val random = new scala.util.Random(0)
     val opts = new ForwardPOSOptions
     opts.parse(args)
-    assert(opts.trainFile.wasInvoked)
-    // Expects three command-line arguments: a train file, a test file, and a place to save the model in
+    assert(opts.trainFile.wasInvoked || opts.trainDir.wasInvoked)
+    // Expects three command-line arguments: a train file, a test file, and a place to save the model
     // the train and test files are supposed to be in OWPL format
     val pos = new ForwardPOSTagger
 
-    val trainDocs = load.LoadOntonotes5.fromFilename(opts.trainFile.value)
-    val testDocs =  load.LoadOntonotes5.fromFilename(opts.testFile.value)
+    var trainFileList = Seq(opts.trainFile.value)
+    if(opts.trainDir.wasInvoked){
+    	trainFileList = getFileListFromDir(opts.trainDir.value, ".dep.pmd")
+    }
+    
+    var testFileList = Seq(opts.testFile.value)
+    if(opts.testDir.wasInvoked){
+    	testFileList = getFileListFromDir(opts.testDir.value, ".dep.pmd")
+    }
+    
+    val trainDocs = trainFileList.map(load.LoadOntonotes5.fromFilename(_).head)
+    val testDocs =  testFileList.map(load.LoadOntonotes5.fromFilename(_).head)
 
     //for (d <- trainDocs) println("POS3.train 1 trainDoc.length="+d.length)
-    println("Read %d training tokens.".format(trainDocs.map(_.tokenCount).sum))
-    println("Read %d testing tokens.".format(testDocs.map(_.tokenCount).sum))
+    println("Read %d training tokens from %d files.".format(trainDocs.map(_.tokenCount).sum, trainDocs.size))
+    println("Read %d testing tokens from %d files.".format(testDocs.map(_.tokenCount).sum, testDocs.size))
 
     val trainPortionToTake = if(opts.trainPortion.wasInvoked) opts.trainPortion.value.toDouble  else 1.0
     val testPortionToTake =  if(opts.testPortion.wasInvoked) opts.testPortion.value.toDouble  else 1.0
@@ -370,6 +430,20 @@ object ForwardPOSTrainer extends HyperparameterMain {
     val acc = pos.accuracy(testDocs.flatMap(_.sentences))
     if(opts.targetAccuracy.wasInvoked) assert(acc > opts.targetAccuracy.value.toDouble, "Did not reach accuracy requirement")
     acc
+  }
+  
+  /**
+   * Returns a list of the file names of files with the given ending under the given directory
+   */
+  def getFileListFromDir(fileName: String, ending: String=""): Seq[String] = {
+    val dir = new File(fileName)
+    println("Getting file list from directory: " + fileName)
+    if (dir != null) {
+      dir.listFiles.filter(_.getName.endsWith(ending)).map(_.getAbsolutePath)
+    } else {
+      println("Directory not found: " + fileName)
+      null
+    }
   }
 }
 
