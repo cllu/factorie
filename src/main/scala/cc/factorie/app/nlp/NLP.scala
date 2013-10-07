@@ -2,6 +2,7 @@ package cc.factorie.app.nlp
 
 import java.io._
 import cc.factorie.app.nlp.parse._
+import cc.factorie.app.nlp.ner._
 import java.net.{ServerSocket,Socket,SocketException}
 
 /** A command-line driver for DocumentAnnotators.
@@ -32,6 +33,7 @@ object NLP {
       val mention3 = new CmdOption("mention3", null, "", "Annotate noun mention boundaries using NER tagger and pronoun patterns.") { override def invoke() = annotators += cc.factorie.app.nlp.mention.NerAndPronounMentionFinder }
       val basicconllner = new CmdOption[String]("basicconllner", null, "URL", "Annotate CoNLL-2003 NER") { override def invoke() = { if (value ne null) System.setProperty(classOf[ner.BasicConllNER].getName, value); annotators += cc.factorie.app.nlp.ner.BasicConllNER } }
       val basicontonotesner = new CmdOption[String]("basicontonotesner", null, "URL", "Annotate Ontonotes NER")  { override def invoke() = { if (value ne null) System.setProperty(classOf[ner.BasicOntonotesNER].getName, value); annotators += cc.factorie.app.nlp.ner.NER2 } }
+      val stackedconllner = new CmdOption[String]("stackedconllner", null, "URL", "Annotate CoNLL-2003 NER using a state-of-the-art system")  { override def invoke() = { if (value ne null) System.setProperty(classOf[ner.StackedNER[BilouConllNerLabel]].getName, value); annotators += cc.factorie.app.nlp.ner.StackedConllNER } }
       //val parser1 = new CmdOption("parser1", ClasspathURL[DepParser1](".factorie").toString, "URL", "Annotate dependency parse with a simple shift-reduce transition-based model.") { override def invoke = { System.setProperty(classOf[DepParser1].getName, value); annotators += cc.factorie.app.nlp.parse.DepParser1 } }
       val transitionparser = new CmdOption[String]("transitionparser", null, "URL", "Annotate dependency parse with a state-of-the-art shift-reduce transition-based model.") { override def invoke() = { if (value ne null) System.setProperty(classOf[TransitionParser].getName, value); annotators += cc.factorie.app.nlp.parse.TransitionParser } }
       val graphparser = new CmdOption[String]("graphparser", null, "URL", "Annotate dependency parse with a first-order projective parser.") { override def invoke() = { if (value ne null) System.setProperty(classOf[GraphProjectiveParser].getName, value); annotators += cc.factorie.app.nlp.parse.GraphProjectiveParser } }
