@@ -68,10 +68,10 @@ object NLP {
       val out = new PrintStream(socket.getOutputStream, false, encoding)
       val in = scala.io.Source.fromInputStream(new DataInputStream(socket.getInputStream), encoding)
       assert(in ne null)
+      var time = System.currentTimeMillis()
       var document = load.LoadPlainText.fromString(in.mkString).head
       document = pipeline.process(document)
-      //logStream.println("Processed %d tokens in %f seconds.".format(document.length, (System.currentTimeMillis - time) / 1000.0))
-      logStream.println("Processed %d tokens.".format(document.tokenCount))
+      logStream.println("Processed %d tokens and %d sentences in %g seconds.".format(document.tokenCount, document.sentenceCount, (System.currentTimeMillis - time) / 1000.0))
       out.println(document.owplString(annotators.map(p => p.tokenAnnotationString(_))))
       val mentions = document.attr[mention.MentionList]
       if (mentions ne null) {

@@ -172,6 +172,9 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
 
   if (url != null) {
     deSerialize(url.openConnection.getInputStream)
+    // freeze!
+    ChainNerFeaturesDomain.freeze()
+    ChainNer2FeaturesDomain.freeze()
     println("Found model")
   }
   else {
@@ -513,6 +516,32 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
     testDocuments.foreach(process)
     printEvaluation(trainDocuments, testDocuments, "FINAL")
   }
+  
+     def detailedAccuracy(testDocs: Seq[Document]): (Double, Double) = {
+    var totalTime = 0.0
+    //var docTotal = 0.0
+    var tokenTotal = 0.0
+    var sentenceTotal = 0.0
+      testDocs.par.foreach(s => {
+         val t0 = System.currentTimeMillis()
+         process(s)
+         totalTime += System.currentTimeMillis()-t0
+         sentenceTotal += s.sentenceCount
+         tokenTotal += s.tokenCount
+      })
+      var sentencesPerSecond = (sentenceTotal/totalTime)*1000.0
+      var tokensPerSecond = (tokenTotal/totalTime)*1000.0
+      //var accuracy = 0.0
+      //accuracy = objective.accuracy(testLabels)
+      printEvaluation(testDocs)
+      (sentencesPerSecond, tokensPerSecond)
+  }
+  
+   def printEvaluation(testDocuments:Iterable[Document]): Double = {
+     val test = evaluationString(testDocuments)
+     println(test)
+     test
+   }
 
    def printEvaluation(trainDocuments:Iterable[Document], testDocuments:Iterable[Document], iteration:String): Double = {
      println("TRAIN")
