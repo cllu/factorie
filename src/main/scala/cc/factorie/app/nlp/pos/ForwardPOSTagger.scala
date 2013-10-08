@@ -214,8 +214,6 @@ class ForwardPOSTagger extends DocumentAnnotator {
     val lemmaStrings = lemmas(tokens)
     for (index <- 0 until tokens.length) {
       val token = tokens(index)
-      val posLabel = token.attr[PennPosLabel]
-      val featureVector = features(token, index, lemmaStrings)
       if (token.attr[PennPosLabel] eq null) token.attr += new PennPosLabel(token, "NNP")
       if (WordData.sureTokens.contains(token.string)) {
         token.attr[PennPosLabel].set(WordData.sureTokens(token.string))(null)
