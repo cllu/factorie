@@ -67,9 +67,9 @@ object NLP {
     override def run(): Unit = try {
       val out = new PrintStream(socket.getOutputStream, false, encoding)
       val in = scala.io.Source.fromInputStream(new DataInputStream(socket.getInputStream), encoding)
-      assert(in ne null)
-      var time = System.currentTimeMillis()
+      assert(in ne null) 
       var document = load.LoadPlainText.fromString(in.mkString).head
+      var time = System.currentTimeMillis()
       document = pipeline.process(document)
       logStream.println("Processed %d tokens and %d sentences in %g seconds.".format(document.tokenCount, document.sentenceCount, (System.currentTimeMillis - time) / 1000.0))
       out.println(document.owplString(annotators.map(p => p.tokenAnnotationString(_))))
