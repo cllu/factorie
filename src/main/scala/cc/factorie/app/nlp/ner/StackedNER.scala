@@ -518,23 +518,21 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
   }
   
      def detailedAccuracy(testDocs: Seq[Document]): (Double, Double) = {
-    var totalTime = 0.0
     //var docTotal = 0.0
     var tokenTotal = 0.0
     var sentenceTotal = 0.0
-      testDocs.par.foreach(s => {
-         val t0 = System.currentTimeMillis()
-         printEvaluation(testDocs)
+    val t0 = System.currentTimeMillis()
+      testDocs.foreach(s => {
          process(s)
-         totalTime += System.currentTimeMillis()-t0
          sentenceTotal += s.sentenceCount
          tokenTotal += s.tokenCount
       })
+      val totalTime = System.currentTimeMillis()-t0
+      printEvaluation(testDocs)
       var sentencesPerSecond = (sentenceTotal/totalTime)*1000.0
       var tokensPerSecond = (tokenTotal/totalTime)*1000.0
       //var accuracy = 0.0
       //accuracy = objective.accuracy(testLabels)
-      printEvaluation(testDocs)
       (sentencesPerSecond, tokensPerSecond)
   }
   
