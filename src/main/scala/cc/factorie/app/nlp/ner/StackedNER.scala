@@ -524,6 +524,7 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
     var sentenceTotal = 0.0
       testDocs.par.foreach(s => {
          val t0 = System.currentTimeMillis()
+         printEvaluation(testDocs)
          process(s)
          totalTime += System.currentTimeMillis()-t0
          sentenceTotal += s.sentenceCount
