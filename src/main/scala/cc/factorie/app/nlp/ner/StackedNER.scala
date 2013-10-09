@@ -529,6 +529,7 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
       })
       val totalTime = System.currentTimeMillis()-t0
       printEvaluation(testDocs)
+    println(totalTime + " secs;" + sentenceTotal + " sents; " + tokenTotal + "toks")
       var sentencesPerSecond = (sentenceTotal/totalTime)*1000.0
       var tokensPerSecond = (tokenTotal/totalTime)*1000.0
       //var accuracy = 0.0
