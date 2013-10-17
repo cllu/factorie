@@ -1,6 +1,6 @@
 package cc.factorie.app.classify
 
-import cc.factorie._
+//import cc.factorie._
 import cc.factorie.la.{Tensor2, DenseTensor2, Tensor1, DenseTensor1}
 import cc.factorie.util.{Threading, TensorCubbie, Cubbie}
 import cc.factorie.variable._
