@@ -2,7 +2,7 @@ package cc.factorie.app.nlp.pos
 import cc.factorie._
 import cc.factorie.app.nlp._
 import cc.factorie.la._
-import cc.factorie.util.{BinarySerializer, CubbieConversions, DoubleAccumulator}
+import cc.factorie.util.{BinarySerializer, CubbieConversions, DoubleAccumulator, FileUtils}
 import java.io.{File,InputStream,FileInputStream}
 import cc.factorie.util.HyperparameterMain
 import cc.factorie.variable.{BinaryFeatureVectorVariable, CategoricalVectorDomain}
@@ -393,12 +393,12 @@ object ForwardPOSTrainer extends HyperparameterMain {
 
     var trainFileList = Seq(opts.trainFile.value)
     if(opts.trainDir.wasInvoked){
-    	trainFileList = getFileListFromDir(opts.trainDir.value, ".dep.pmd")
+    	trainFileList = FileUtils.getFileListFromDir(opts.trainDir.value, ".dep.pmd")
     }
     
     var testFileList = Seq(opts.testFile.value)
     if(opts.testDir.wasInvoked){
-    	testFileList = getFileListFromDir(opts.testDir.value, ".dep.pmd")
+    	testFileList = FileUtils.getFileListFromDir(opts.testDir.value, ".dep.pmd")
     }
     
     val trainDocs = trainFileList.map(load.LoadOntonotes5.fromFilename(_).head)
@@ -428,20 +428,6 @@ object ForwardPOSTrainer extends HyperparameterMain {
     val acc = pos.accuracy(testDocs.flatMap(_.sentences))
     if(opts.targetAccuracy.wasInvoked) assert(acc > opts.targetAccuracy.value.toDouble, "Did not reach accuracy requirement")
     acc
-  }
-  
-  /**
-   * Returns a list of the file names of files with the given ending under the given directory
-   */
-  def getFileListFromDir(fileName: String, ending: String=""): Seq[String] = {
-    val dir = new File(fileName)
-    println("Getting file list from directory: " + fileName)
-    if (dir != null) {
-      dir.listFiles.filter(_.getName.endsWith(ending)).map(_.getAbsolutePath)
-    } else {
-      println("Directory not found: " + fileName)
-      null
-    }
   }
 }
 
