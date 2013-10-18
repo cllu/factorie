@@ -262,26 +262,26 @@ class ForwardPOSTagger extends DocumentAnnotator {
     dstream.close()  // TODO Are we really supposed to close here, or is that the responsibility of the caller
   }
   
-  // TODO re-use code
-  def accuracy(sentences:Iterable[Sentence]): Double = {
-    var total = 0.0
-    var correct = 0.0
-    var totalTime = 0L
-    sentences.foreach(s => {
-      val t0 = System.currentTimeMillis()
-      predict(s)
-      totalTime += (System.currentTimeMillis()-t0)
-      for (token <- s.tokens) {
-        total += 1
-        if (token.attr[PennPosLabel].valueIsTarget) correct += 1.0
-      }
-    })
-    println(s"${total*1000/totalTime} tokens/sec")
-    correct/total
+  def printAccuracy(sentences: Iterable[Sentence], extraText: String) = {
+    var(tokAcc, senAcc, speed, toks) = accuracy(sentences)
+    println(extraText + s"${tokAcc} token accuracy, ${senAcc} sentence accuracy, ${speed} tokens/sec")
+//    var total = 0.0
+//    var correct = 0.0
+//    var totalTime = 0L
+//    sentences.foreach(s => {
+//      val t0 = System.currentTimeMillis()
+//      predict(s)
+//      totalTime += (System.currentTimeMillis()-t0)
+//      for (token <- s.tokens) {
+//        total += 1
+//        if (token.attr[PennPosLabel].valueIsTarget) correct += 1.0
+//      }
+//    })
+//    println(s"${total*1000/totalTime} tokens/sec")
+//    correct/total
   }
   
-  // TODO re-use code
-  def detailedAccuracy(sentences:Iterable[Sentence]): (Double, Double, Double, Double) = {
+  def accuracy(sentences:Iterable[Sentence]): (Double, Double, Double, Double) = {
     var tokenTotal = 0.0
     var tokenCorrect = 0.0
     var totalTime = 0.0
@@ -306,7 +306,7 @@ class ForwardPOSTagger extends DocumentAnnotator {
   
   def test(sentences:Iterable[Sentence]) = {
     println("Testing on " + sentences.size + " sentences...")
-    var(tokAccuracy, sentAccuracy, speed, tokens) = detailedAccuracy(sentences)
+    var(tokAccuracy, sentAccuracy, speed, tokens) = accuracy(sentences)
     println("Tested on " + tokens + " tokens at " + speed + " tokens/sec")
     println("Token accuracy: " + tokAccuracy)
     println("Sentence accuracy: " + sentAccuracy)
@@ -325,8 +325,8 @@ class ForwardPOSTagger extends DocumentAnnotator {
     println("POS1.train\n"+trainSentences(3).tokens.map(_.string).zip(features(trainSentences(3).tokens).map(t => new FeatureVariable(t).toString)).mkString("\n"))
     def evaluate() {
       exampleSetsToPrediction = doBootstrap
-      println("Train accuracy: "+accuracy(trainSentences))
-      println("Test  accuracy: "+accuracy(testSentences))
+      printAccuracy(trainSentences, "Training: ")
+      printAccuracy(testSentences, "Testing: ")
       println(s"Sparsity: ${model.weights.value.toSeq.count(_ == 0).toFloat/model.weights.value.length}")
     }
     val examples = trainSentences.shuffle.par.map(sentence =>
@@ -415,17 +415,16 @@ object ForwardPOSTrainer extends HyperparameterMain {
     val testSentencesFull = testDocs.flatMap(_.sentences)
     val testSentences = testSentencesFull.take((testPortionToTake*testSentencesFull.length).floor.toInt)
 
-
     pos.train(trainSentences, testSentences,
               opts.rate.value, opts.delta.value, opts.cutoff.value, opts.updateExamples.value, opts.useHingeLoss.value, numIterations=opts.numIters.value.toInt,l1Factor=opts.l1.value, l2Factor=opts.l2.value)
     if (opts.saveModel.value) {
-      println("pre serialize accuracy: " + pos.accuracy(testDocs.flatMap(_.sentences)))
       pos.serialize(opts.modelFile.value)
       val pos2 = new ForwardPOSTagger
       pos2.deserialize(new java.io.File(opts.modelFile.value))
-      println(s"pre accuracy: ${pos.accuracy(testDocs.flatMap(_.sentences))} post accuracy: ${pos2.accuracy(testDocs.flatMap(_.sentences))}")
+      pos.printAccuracy(testDocs.flatMap(_.sentences), "pre-serialize accuracy: ")
+      pos2.printAccuracy(testDocs.flatMap(_.sentences), "post-serialize accuracy: ")
     }
-    val acc = pos.accuracy(testDocs.flatMap(_.sentences))
+    val acc = pos.accuracy(testDocs.flatMap(_.sentences))._1
     if(opts.targetAccuracy.wasInvoked) assert(acc > opts.targetAccuracy.value.toDouble, "Did not reach accuracy requirement")
     acc
   }

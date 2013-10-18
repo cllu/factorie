@@ -516,26 +516,22 @@ class StackedNER[L<:NerLabel](labelDomain: CategoricalDomain[String],
     testDocuments.foreach(process)
     printEvaluation(trainDocuments, testDocuments, "FINAL")
   }
-  
-     def detailedAccuracy(testDocs: Seq[Document]): (Double, Double) = {
-    //var docTotal = 0.0
+
+  def test(testDocs: Seq[Document]): (Double, Double, Double) = {
     var tokenTotal = 0.0
     var sentenceTotal = 0.0
     val t0 = System.currentTimeMillis()
-      testDocs.foreach(s => {
-    	 process(s)
-         printEvaluation(testDocs)
-         sentenceTotal += s.sentenceCount
-         tokenTotal += s.tokenCount
-      })
-      val totalTime = System.currentTimeMillis()-t0
-      //printEvaluation(testDocs)
-      println(totalTime + " secs;" + sentenceTotal + " sents; " + tokenTotal + "toks")
-      var sentencesPerSecond = (sentenceTotal/totalTime)*1000.0
-      var tokensPerSecond = (tokenTotal/totalTime)*1000.0
-      //var accuracy = 0.0
-      //accuracy = objective.accuracy(testLabels)
-      (sentencesPerSecond, tokensPerSecond)
+    val segmentEvaluation = new cc.factorie.app.chain.SegmentEvaluation[L](labelDomain.categories.filter(_.length > 2).map(_.substring(2)), "(B|U)-", "(I|L)-")
+    testDocs.foreach(doc => {
+      process(doc)
+      for(sentence <- doc.sentences) segmentEvaluation += sentence.tokens.map(_.attr[L])
+      sentenceTotal += doc.sentenceCount
+      tokenTotal += doc.tokenCount
+    })
+    val totalTime = System.currentTimeMillis() - t0
+    var sentencesPerSecond = (sentenceTotal / totalTime) * 1000.0
+    var tokensPerSecond = (tokenTotal / totalTime) * 1000.0
+    (sentencesPerSecond, tokensPerSecond, segmentEvaluation.f1)
   }
   
    def printEvaluation(testDocuments:Iterable[Document]): Double = {

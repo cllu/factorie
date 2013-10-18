@@ -125,12 +125,18 @@ class TransitionParser extends DocumentAnnotator {
   }
   
   def testString(testSentences:Iterable[Sentence]): String = {
+    val(las, uas, tokSpeed, sentSpeed) = test(testSentences)
+    "LAS="+las+" UAS="+uas+s"  ${tokSpeed} tokens/sec"
+  }
+  
+  def test(testSentences:Iterable[Sentence]): (Double, Double, Double, Double) = {
     val t0 = System.currentTimeMillis()
     testSentences.foreach(process)
     val totalTime = System.currentTimeMillis() - t0
     val totalTokens = testSentences.map(_.tokens.length).sum
+    val totalSentences = testSentences.size
     val pred = testSentences.map(_.attr[ParseTree])
-    "LAS="+ParserEval.calcLas(pred)+" UAS="+ParserEval.calcUas(pred)+s"  ${totalTokens*1000.0/totalTime} tokens/sec"
+    (ParserEval.calcLas(pred), ParserEval.calcUas(pred), totalTokens*1000.0/totalTime, totalSentences*1000.0/totalTime)
   }
 
 
